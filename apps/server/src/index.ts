@@ -6,6 +6,8 @@ import { auth } from "./lib/auth";
 import { Hono } from "hono";
 import { cors } from "hono/cors";
 import { logger } from "hono/logger";
+import { rpcHandler } from "./rpc-handler";
+import { apiHandler } from "./api-handler";
 
 const app = new Hono();
 
@@ -22,17 +24,27 @@ app.use(
 
 app.on(["POST", "GET"], "/api/auth/**", (c) => auth.handler(c.req.raw));
 
-const handler = new RPCHandler(appRouter);
-app.use("/rpc/*", async (c, next) => {
+app.use("/*", async (c, next) => {
 	const context = await createContext({ context: c });
-	const { matched, response } = await handler.handle(c.req.raw, {
+
+	const rpcResult = await rpcHandler.handle(c.req.raw, {
 		prefix: "/rpc",
 		context: context,
 	});
 
-	if (matched) {
-		return c.newResponse(response.body, response);
+	if (rpcResult.matched) {
+		return c.newResponse(rpcResult.response.body, rpcResult.response);
 	}
+
+	const apiResult = await apiHandler.handle(c.req.raw, {
+		prefix: "/api",
+		context: context,
+	});
+
+	if (apiResult.matched) {
+		return c.newResponse(apiResult.response.body, apiResult.response);
+	}
+
 	await next();
 });
 
